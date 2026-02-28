@@ -408,55 +408,57 @@ export default function App() {
   const renderInvestigation = () => (
     <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
       {/* Sidebar: Suspects & Notes */}
-      <div className="w-80 border-r border-zinc-800 flex flex-col">
-        <div className="p-6 border-b border-zinc-800">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
-            <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
-              <Users size={10} /> {investigation.players.length} ACTIVE
+      <div className="w-80 border-r border-zinc-800 flex flex-col h-full bg-[#0a0a0a]">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
+          <div className="p-6 border-b border-zinc-800">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
+              <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
+                <Users size={10} /> {investigation.players.length} ACTIVE
+              </div>
+            </div>
+            <div className="space-y-2">
+              {investigation.case?.suspects.map(suspect => (
+                <div key={suspect.id} className="relative group">
+                  <button
+                    onClick={() => setInvestigation(prev => ({ ...prev, currentSuspectId: suspect.id }))}
+                    className={`w-full p-3 rounded-xl text-left transition-all flex items-center gap-3 ${
+                      investigation.currentSuspectId === suspect.id 
+                        ? 'bg-white text-black' 
+                        : 'hover:bg-zinc-900 text-zinc-400'
+                    }`}
+                  >
+                    <div className={`w-2 h-2 rounded-full ${investigation.currentSuspectId === suspect.id ? 'bg-black' : 'bg-zinc-700'}`} />
+                    <span className="font-medium flex-1 truncate">{suspect.name}</span>
+                  </button>
+                  <button 
+                    onClick={() => setShowProfile(suspect.id)}
+                    className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
+                      investigation.currentSuspectId === suspect.id ? 'text-black hover:bg-black/5' : 'text-zinc-500 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <Info size={14} />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="space-y-2">
-            {investigation.case?.suspects.map(suspect => (
-              <div key={suspect.id} className="relative group">
-                <button
-                  onClick={() => setInvestigation(prev => ({ ...prev, currentSuspectId: suspect.id }))}
-                  className={`w-full p-3 rounded-xl text-left transition-all flex items-center gap-3 ${
-                    investigation.currentSuspectId === suspect.id 
-                      ? 'bg-white text-black' 
-                      : 'hover:bg-zinc-900 text-zinc-400'
-                  }`}
-                >
-                  <div className={`w-2 h-2 rounded-full ${investigation.currentSuspectId === suspect.id ? 'bg-black' : 'bg-zinc-700'}`} />
-                  <span className="font-medium flex-1 truncate">{suspect.name}</span>
-                </button>
-                <button 
-                  onClick={() => setShowProfile(suspect.id)}
-                  className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity ${
-                    investigation.currentSuspectId === suspect.id ? 'text-black hover:bg-black/5' : 'text-zinc-500 hover:bg-zinc-800'
-                  }`}
-                >
-                  <Info size={14} />
-                </button>
-              </div>
-            ))}
+
+          <div className="p-6 flex flex-col">
+            <div className="flex items-center gap-2 mb-4">
+              <BookOpen size={16} className="text-zinc-500" />
+              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
+            </div>
+            <textarea
+              value={investigation.notes}
+              onChange={(e) => updateNotes(e.target.value)}
+              placeholder="Record clues, contradictions, and theories..."
+              className="w-full h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none"
+            />
           </div>
         </div>
 
-        <div className="flex-1 p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-4">
-            <BookOpen size={16} className="text-zinc-500" />
-            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
-          </div>
-          <textarea
-            value={investigation.notes}
-            onChange={(e) => updateNotes(e.target.value)}
-            placeholder="Record clues, contradictions, and theories..."
-            className="flex-1 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none"
-          />
-        </div>
-
-        <div className="p-6 border-t border-zinc-800 space-y-3">
+        <div className="p-6 border-t border-zinc-800 space-y-3 bg-[#0a0a0a] shrink-0">
           <button 
             onClick={() => setShowBriefingModal(true)}
             className="w-full py-3 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-xl font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"

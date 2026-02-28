@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export const generateCase = async (): Promise<Case> => {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: "Generate a detailed criminal case (Murder, Kidnapping, Theft, or Fraud) for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, type (e.g., 'Murder Investigation'), description (a narrative of what happened), victim, crime scene, time, cause of death (or method of crime), 3 initial clues, 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
+    contents: "Generate a detailed criminal case (Murder, Kidnapping, Theft, or Fraud) for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore, Kolkata), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, type (e.g., 'Murder Investigation'), description (a narrative of what happened), victim, crime scene, time, cause of death (or method of crime), 3 initial clues, 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -104,12 +104,21 @@ export const evaluateAccusation = async (
     contents: `
       As the Chief Inspector (an experienced Indian Police Officer), evaluate the detective's accusation. Use Indian English and a professional yet firm tone.
       Case: ${caseInfo.title}
-      Culprit was: ${caseInfo.suspects.find(s => s.isCulprit)?.name}
-      Detective accused: ${accusedSuspect?.name}
+      The real culprit was: ${caseInfo.suspects.find(s => s.isCulprit)?.name}
+      The detective accused: ${accusedSuspect?.name}
       Detective's reasoning: ${reasoning}
-      Detective's notes: ${notes}
+      Detective's investigation notes: ${notes}
 
-      Provide a score (0-100) and detailed feedback on their logic and investigation.
+      If the detective is WRONG (accused the wrong person):
+      1. Explain why their reasoning for accusing ${accusedSuspect?.name} was flawed.
+      2. Explicitly state which specific clues, contradictions, or details from the case (like the suspects' secrets, alibis, or the initial clues) should have led them to ${caseInfo.suspects.find(s => s.isCulprit)?.name}.
+      3. Be firm but constructive, like a senior officer teaching a junior.
+
+      If the detective is RIGHT:
+      1. Commend their sharp observation.
+      2. Mention the key pieces of evidence they correctly identified.
+
+      Provide a score (0-100) and detailed feedback.
     `,
     config: {
       responseMimeType: "application/json",

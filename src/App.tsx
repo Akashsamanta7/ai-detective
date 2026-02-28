@@ -51,6 +51,7 @@ export default function App() {
   const [joinCode, setJoinCode] = useState('');
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState<string | null>(null);
+  const [showBriefingModal, setShowBriefingModal] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -332,8 +333,13 @@ export default function App() {
         className="max-w-3xl w-full space-y-8"
       >
         <div className="flex justify-between items-start border-b border-zinc-800 pb-4">
-          <div>
-            <h2 className="text-sm font-mono text-zinc-500 uppercase tracking-widest mb-2">Case File #{investigation.code}</h2>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 bg-red-900/30 text-red-500 text-[10px] font-mono border border-red-900/50 rounded uppercase tracking-widest">
+                {investigation.case?.type || 'Criminal Case'}
+              </span>
+              <h2 className="text-sm font-mono text-zinc-500 uppercase tracking-widest">Case File #{investigation.code}</h2>
+            </div>
             <h1 className="text-4xl font-serif italic">{investigation.case?.title}</h1>
           </div>
           <div className="flex flex-col items-end gap-2">
@@ -348,6 +354,13 @@ export default function App() {
               {investigation.mode} MODE
             </span>
           </div>
+        </div>
+
+        <div className="bg-zinc-900/30 border border-zinc-800 p-6 rounded-2xl">
+          <h3 className="text-xs font-mono text-zinc-500 uppercase mb-3">Case Summary</h3>
+          <p className="text-zinc-300 leading-relaxed italic">
+            {investigation.case?.description}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -444,6 +457,13 @@ export default function App() {
         </div>
 
         <div className="p-6 border-t border-zinc-800 space-y-3">
+          <button 
+            onClick={() => setShowBriefingModal(true)}
+            className="w-full py-3 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-xl font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
+          >
+            <AlertCircle size={18} />
+            CASE BRIEFING
+          </button>
           <div className="flex items-center justify-between px-1">
             <span className="text-[10px] font-mono text-zinc-600 uppercase">Room Code</span>
             <span className="text-[10px] font-mono text-white">{investigation.code}</span>
@@ -597,6 +617,90 @@ export default function App() {
                   className="w-full py-3 bg-white text-black rounded-xl font-bold hover:bg-zinc-200 transition-colors"
                 >
                   CLOSE PROFILE
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Case Briefing Modal */}
+      <AnimatePresence>
+        {showBriefingModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-6"
+            onClick={() => setShowBriefingModal(false)}
+          >
+            <motion.div 
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-3xl overflow-hidden"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="p-8 space-y-6 max-h-[80vh] overflow-y-auto">
+                <div className="flex justify-between items-start border-b border-zinc-800 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 bg-red-900/30 text-red-500 text-[10px] font-mono border border-red-900/50 rounded uppercase tracking-widest">
+                        {investigation.case?.type}
+                      </span>
+                      <h4 className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">Case File #{investigation.code}</h4>
+                    </div>
+                    <h2 className="text-3xl font-serif italic">{investigation.case?.title}</h2>
+                  </div>
+                  <button onClick={() => setShowBriefingModal(false)} className="p-2 hover:bg-zinc-800 rounded-full transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  <div>
+                    <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">What Happened</h4>
+                    <p className="text-sm text-zinc-300 leading-relaxed italic">
+                      {investigation.case?.description}
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                      <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Victim</h4>
+                      <p className="text-sm text-white">{investigation.case?.victim}</p>
+                    </div>
+                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                      <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Scene</h4>
+                      <p className="text-sm text-white">{investigation.case?.crimeScene}</p>
+                    </div>
+                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                      <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Time</h4>
+                      <p className="text-sm text-white">{investigation.case?.timeOfCrime}</p>
+                    </div>
+                    <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                      <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Method</h4>
+                      <p className="text-sm text-white">{investigation.case?.causeOfDeath}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Initial Clues</h4>
+                    <ul className="space-y-2">
+                      {investigation.case?.initialClues.map((clue, i) => (
+                        <li key={i} className="text-sm text-zinc-300 flex gap-2">
+                          <span className="text-zinc-600">•</span> {clue}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => setShowBriefingModal(false)}
+                  className="w-full py-3 bg-white text-black rounded-xl font-bold hover:bg-zinc-200 transition-colors"
+                >
+                  RETURN TO INVESTIGATION
                 </button>
               </div>
             </motion.div>

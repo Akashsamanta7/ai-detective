@@ -11,15 +11,12 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Temporary memory fallback for local testing without MongoDB
-const localRooms = new Map<string, any>();
-
 // MongoDB Schema
 const roomSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true },
   mode: { type: String, required: true },
   data: { type: Object, required: true },
-  createdAt: { type: Date, default: Date.now, expires: 86400 * 7 } // Auto-delete after 7 days
+  createdAt: { type: Date, default: Date.now, expires: 86400 * 365 } // Auto-delete after 365 days of inactivity
 });
 
 const Room = mongoose.model("Room", roomSchema);
@@ -38,7 +35,7 @@ async function startServer() {
       console.error("MongoDB connection error:", err);
     }
   } else {
-    console.warn("MONGODB_URI not found. Using local memory fallback for testing.");
+    console.warn("MONGODB_URI not found. Persistence will not work on Render free tier.");
   }
 
   app.use(express.json());
@@ -47,12 +44,8 @@ async function startServer() {
   app.post("/api/rooms", async (req, res) => {
     const { code, mode, data } = req.body;
     try {
-      if (mongoose.connection.readyState === 1) {
-        const newRoom = new Room({ code, mode, data });
-        await newRoom.save();
-      } else {
-        localRooms.set(code, { code, mode, data });
-      }
+      const newRoom = new Room({ code, mode, data });
+      await newRoom.save();
       res.json({ success: true });
     } catch (err) {
       console.error(err);
@@ -62,13 +55,7 @@ async function startServer() {
 
   app.get("/api/rooms/:code", async (req, res) => {
     try {
-      let room;
-      if (mongoose.connection.readyState === 1) {
-        room = await Room.findOne({ code: req.params.code });
-      } else {
-        room = localRooms.get(req.params.code);
-      }
-
+      const room = await Room.findOne({ code: req.params.code });
       if (room) {
         res.json(room);
       } else {
@@ -82,15 +69,10 @@ async function startServer() {
   app.put("/api/rooms/:code", async (req, res) => {
     const { data } = req.body;
     try {
-      if (mongoose.connection.readyState === 1) {
-        await Room.findOneAndUpdate({ code: req.params.code }, { data });
-      } else {
-        const room = localRooms.get(req.params.code);
-        if (room) {
-          room.data = data;
-          localRooms.set(req.params.code, room);
-        }
-      }
+      await Room.findOneAndUpdate(
+        { code: req.params.code }, 
+        { data, createdAt: new Date() } // Refresh the TTL timer on every update
+      );
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Failed to update room" });
@@ -100,6 +82,7 @@ async function startServer() {
   if (process.env.NODE_ENV === "production") {
     app.use(express.static(path.join(__dirname, "dist")));
     app.get("*", (req, res, next) => {
+      // Skip API routes
       if (req.path.startsWith('/api')) return next();
       res.sendFile(path.join(__dirname, "dist", "index.html"));
     });
@@ -135,6 +118,7 @@ async function startServer() {
 
     ws.on("message", (message) => {
       const data = JSON.parse(message.toString());
+      // Broadcast to other clients in the same room
       const roomClients = clients.get(code);
       if (roomClients) {
         roomClients.forEach((client) => {

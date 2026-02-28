@@ -52,6 +52,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState<string | null>(null);
   const [showBriefingModal, setShowBriefingModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'sidebar'>('chat');
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -406,11 +407,11 @@ export default function App() {
   );
 
   const renderInvestigation = () => (
-    <div className="flex h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Sidebar: Suspects & Notes */}
-      <div className="w-80 border-r border-zinc-800 flex flex-col h-full bg-[#0a0a0a]">
+    <div className="flex flex-col md:flex-row h-screen bg-[#0a0a0a] text-white overflow-hidden">
+      {/* Sidebar: Suspects & Notes - Hidden on mobile unless activeTab is 'sidebar' */}
+      <div className={`${activeTab === 'sidebar' ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
-          <div className="p-6 border-b border-zinc-800">
+          <div className="p-4 md:p-6 border-b border-zinc-800">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
               <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
@@ -421,7 +422,10 @@ export default function App() {
               {investigation.case?.suspects.map(suspect => (
                 <div key={suspect.id} className="relative group">
                   <button
-                    onClick={() => setInvestigation(prev => ({ ...prev, currentSuspectId: suspect.id }))}
+                    onClick={() => {
+                      setInvestigation(prev => ({ ...prev, currentSuspectId: suspect.id }));
+                      if (window.innerWidth < 768) setActiveTab('chat');
+                    }}
                     className={`w-full p-3 rounded-xl text-left transition-all flex items-center gap-3 ${
                       investigation.currentSuspectId === suspect.id 
                         ? 'bg-white text-black' 
@@ -444,7 +448,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="p-6 flex flex-col">
+          <div className="p-4 md:p-6 flex flex-col">
             <div className="flex items-center gap-2 mb-4">
               <BookOpen size={16} className="text-zinc-500" />
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
@@ -453,12 +457,12 @@ export default function App() {
               value={investigation.notes}
               onChange={(e) => updateNotes(e.target.value)}
               placeholder="Record clues, contradictions, and theories..."
-              className="w-full h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none"
+              className="w-full h-48 md:h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none"
             />
           </div>
         </div>
 
-        <div className="p-6 border-t border-zinc-800 space-y-3 bg-[#0a0a0a] shrink-0">
+        <div className="p-4 md:p-6 border-t border-zinc-800 space-y-3 bg-[#0a0a0a] shrink-0 mb-16 md:mb-0">
           <button 
             onClick={() => setShowBriefingModal(true)}
             className="w-full py-3 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-xl font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
@@ -480,32 +484,32 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main: Interrogation */}
-      <div className="flex-1 flex flex-col relative">
+      {/* Main: Interrogation - Hidden on mobile unless activeTab is 'chat' */}
+      <div className={`${activeTab === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 flex-col relative h-full`}>
         {investigation.currentSuspectId ? (
           <>
-            <div className="p-6 border-b border-zinc-800 flex justify-between items-center">
+            <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center bg-[#0a0a0a]">
               <div>
-                <h2 className="text-2xl font-serif italic">
+                <h2 className="text-xl md:text-2xl font-serif italic">
                   {investigation.case?.suspects.find(s => s.id === investigation.currentSuspectId)?.name}
                 </h2>
-                <p className="text-xs text-zinc-500 font-mono uppercase">Interrogation in progress</p>
+                <p className="text-[10px] md:text-xs text-zinc-500 font-mono uppercase">Interrogation in progress</p>
               </div>
               <button 
                 onClick={() => setShowProfile(investigation.currentSuspectId)}
-                className="flex items-center gap-2 text-xs font-mono text-zinc-500 hover:text-white transition-colors"
+                className="flex items-center gap-2 text-[10px] md:text-xs font-mono text-zinc-500 hover:text-white transition-colors"
               >
-                VIEW PROFILE <Info size={14} />
+                <span className="hidden sm:inline">VIEW PROFILE</span> <Info size={14} />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-32 md:pb-6">
               {investigation.chatHistory[investigation.currentSuspectId]?.map((msg, i) => (
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   {msg.sender && msg.sender !== investigation.myPlayerId && (
                     <span className="text-[10px] font-mono text-zinc-600 mb-1 uppercase">Partner</span>
                   )}
-                  <div className={`max-w-[80%] p-4 rounded-2xl ${
+                  <div className={`max-w-[85%] md:max-w-[80%] p-3 md:p-4 rounded-2xl ${
                     msg.role === 'user' 
                       ? (msg.sender === investigation.myPlayerId ? 'bg-zinc-100 text-black rounded-tr-none' : 'bg-zinc-800 text-white rounded-tr-none border border-zinc-700')
                       : 'bg-zinc-900 text-zinc-200 rounded-tl-none border border-zinc-800'
@@ -524,35 +528,59 @@ export default function App() {
               <div ref={chatEndRef} />
             </div>
 
-            <div className="p-6 border-t border-zinc-800">
+            <div className="p-4 md:p-6 border-t border-zinc-800 bg-[#0a0a0a] absolute bottom-16 md:bottom-0 left-0 right-0">
               <div className="relative">
                 <input
                   type="text"
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Ask a question or present evidence..."
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-4 pl-6 pr-14 focus:outline-none focus:border-zinc-600 text-sm"
+                  placeholder="Ask a question..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 md:py-4 pl-5 md:pl-6 pr-12 md:pr-14 focus:outline-none focus:border-zinc-600 text-sm"
                 />
                 <button 
                   onClick={handleSendMessage}
                   disabled={loading || !inputText.trim()}
-                  className="absolute right-2 top-2 p-2 bg-white text-black rounded-full hover:bg-zinc-200 disabled:opacity-50 transition-all"
+                  className="absolute right-1.5 md:right-2 top-1.5 md:top-2 p-2 bg-white text-black rounded-full hover:bg-zinc-200 disabled:opacity-50 transition-all"
                 >
-                  <Send size={20} />
+                  <Send size={18} md:size={20} />
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
-            <div className="w-24 h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
-              <MessageSquare size={40} className="text-zinc-700" />
+          <div className="flex-1 flex flex-col items-center justify-center p-8 md:p-12 text-center">
+            <div className="w-20 h-20 md:w-24 md:h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
+              <MessageSquare size={32} md:size={40} className="text-zinc-700" />
             </div>
-            <h2 className="text-xl font-medium mb-2">Select a Suspect</h2>
-            <p className="text-zinc-500 max-w-sm">Choose a suspect from the sidebar to begin interrogation. Watch for contradictions and hidden motives.</p>
+            <h2 className="text-lg md:text-xl font-medium mb-2">Select a Suspect</h2>
+            <p className="text-zinc-500 max-w-sm text-sm">Choose a suspect from the sidebar to begin interrogation. Watch for contradictions and hidden motives.</p>
+            <button 
+              onClick={() => setActiveTab('sidebar')}
+              className="mt-6 md:hidden px-6 py-2 bg-zinc-800 text-white rounded-full text-sm font-bold"
+            >
+              OPEN SUSPECT LIST
+            </button>
           </div>
         )}
+      </div>
+
+      {/* Mobile Navigation Bar */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-zinc-950 border-t border-zinc-800 flex items-center justify-around z-30 px-4">
+        <button 
+          onClick={() => setActiveTab('sidebar')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'sidebar' ? 'text-white' : 'text-zinc-500'}`}
+        >
+          <BookOpen size={20} />
+          <span className="text-[10px] font-mono uppercase">Case</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('chat')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'chat' ? 'text-white' : 'text-zinc-500'}`}
+        >
+          <MessageSquare size={20} />
+          <span className="text-[10px] font-mono uppercase">Chat</span>
+        </button>
       </div>
 
       {/* Suspect Profile Modal */}

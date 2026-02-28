@@ -24,6 +24,8 @@ export interface Suspect {
 
 export interface Case {
   title: string;
+  type: string; // e.g., "Murder", "Kidnapping", "Theft"
+  description: string; // Detailed narrative of what happened
   victim: string;
   crimeScene: string;
   timeOfCrime: string;

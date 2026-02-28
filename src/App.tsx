@@ -53,6 +53,9 @@ export default function App() {
   const [showProfile, setShowProfile] = useState<string | null>(null);
   const [showBriefingModal, setShowBriefingModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'sidebar'>('chat');
+  const [isConnected, setIsConnected] = useState(false);
+  const [partnerTyping, setPartnerTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -71,6 +74,9 @@ export default function App() {
       const socket = new WebSocket(`${protocol}//${window.location.host}?code=${investigation.code}`);
       socketRef.current = socket;
 
+      socket.onopen = () => setIsConnected(true);
+      socket.onclose = () => setIsConnected(false);
+
       socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'SYNC_STATE') {
@@ -86,6 +92,12 @@ export default function App() {
               [suspectId]: [...(prev.chatHistory[suspectId] || []), message]
             }
           }));
+        } else if (data.type === 'SYNC_TYPING') {
+          setPartnerTyping(data.payload);
+          if (data.payload) {
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            typingTimeoutRef.current = setTimeout(() => setPartnerTyping(false), 3000);
+          }
         } else if (data.type === 'SYNC_ACCUSATION') {
           setInvestigation(prev => ({ ...prev, accusationResult: data.payload }));
           setGameState(GameState.EVALUATION);
@@ -152,16 +164,6 @@ export default function App() {
       if (!res.ok) throw new Error("Room not found");
       const room = await res.json();
       
-      // Check mode compatibility
-      if (room.mode === 'SINGLE' && room.data.players.length >= 1 && !room.data.players.includes(investigation.myPlayerId)) {
-        alert("This is a single player room and is already occupied.");
-        return;
-      }
-      if (room.mode === 'COOP' && room.data.players.length >= 2 && !room.data.players.includes(investigation.myPlayerId)) {
-        alert("This room is full.");
-        return;
-      }
-
       const updatedPlayers = room.data.players.includes(investigation.myPlayerId) 
         ? room.data.players 
         : [...room.data.players, investigation.myPlayerId];
@@ -174,7 +176,13 @@ export default function App() {
       });
 
       setInvestigation(prev => ({ ...prev, ...updatedData }));
-      setGameState(GameState.BRIEFING);
+      
+      if (updatedData.accusationResult) {
+        setGameState(GameState.EVALUATION);
+      } else {
+        setGameState(GameState.BRIEFING);
+      }
+      
       broadcast('SYNC_STATE', updatedData);
     } catch (error) {
       alert("Could not join room. Please check the code.");
@@ -186,6 +194,7 @@ export default function App() {
   const handleSendMessage = async () => {
     if (!inputText.trim() || !investigation.currentSuspectId || !investigation.case) return;
 
+    broadcast('SYNC_TYPING', false);
     const suspect = investigation.case.suspects.find(s => s.id === investigation.currentSuspectId)!;
     const currentHistory = investigation.chatHistory[suspect.id] || [];
     
@@ -413,7 +422,10 @@ export default function App() {
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 md:p-6 border-b border-zinc-800">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
+                <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} title={isConnected ? "Live Connected" : "Disconnected"} />
+              </div>
               <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
                 <Users size={10} /> {investigation.players.length} ACTIVE
               </div>
@@ -518,6 +530,18 @@ export default function App() {
                   </div>
                 </div>
               ))}
+              {partnerTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-zinc-900/50 px-4 py-2 rounded-full border border-zinc-800 flex items-center gap-2">
+                    <div className="flex gap-1">
+                      <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-1 h-1 bg-zinc-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                    <span className="text-[10px] font-mono text-zinc-500 uppercase">Partner is typing</span>
+                  </div>
+                </div>
+              )}
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-zinc-900 p-4 rounded-2xl rounded-tl-none border border-zinc-800">
@@ -533,7 +557,10 @@ export default function App() {
                 <input
                   type="text"
                   value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
+                  onChange={(e) => {
+                    setInputText(e.target.value);
+                    broadcast('SYNC_TYPING', e.target.value.length > 0);
+                  }}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder="Ask a question..."
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 md:py-4 pl-5 md:pl-6 pr-12 md:pr-14 focus:outline-none focus:border-zinc-600 text-sm"
@@ -816,6 +843,9 @@ export default function App() {
           <h1 className="text-6xl font-serif italic">
             {investigation.accusationResult?.isCorrect ? 'Justice Served' : 'The Killer Escaped'}
           </h1>
+          <p className="text-zinc-400 font-mono uppercase tracking-widest">
+            Case: {investigation.case?.title}
+          </p>
           <div className="text-4xl font-mono text-zinc-500">
             Score: {investigation.accusationResult?.score}/100
           </div>

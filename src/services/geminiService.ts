@@ -6,13 +6,15 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export const generateCase = async (): Promise<Case> => {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: "Generate a detailed murder mystery case for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, victim, crime scene, time, cause of death, 3 initial clues, 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
+    contents: "Generate a detailed criminal case (Murder, Kidnapping, Theft, or Fraud) for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, type (e.g., 'Murder Investigation'), description (a narrative of what happened), victim, crime scene, time, cause of death (or method of crime), 3 initial clues, 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
     config: {
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
         properties: {
           title: { type: Type.STRING },
+          type: { type: Type.STRING },
+          description: { type: Type.STRING },
           victim: { type: Type.STRING },
           crimeScene: { type: Type.STRING },
           timeOfCrime: { type: Type.STRING },
@@ -40,7 +42,7 @@ export const generateCase = async (): Promise<Case> => {
           },
           solution: { type: Type.STRING }
         },
-        required: ["title", "victim", "crimeScene", "timeOfCrime", "causeOfDeath", "initialClues", "suspects", "solution"]
+        required: ["title", "type", "description", "victim", "crimeScene", "timeOfCrime", "causeOfDeath", "initialClues", "suspects", "solution"]
       }
     }
   });

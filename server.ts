@@ -40,6 +40,19 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API Route to provide keys to the client (safely filtered)
+  app.get("/api/config/keys", (req, res) => {
+    const keys: string[] = [];
+    if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
+    
+    // Check for both VITE_ and non-VITE versions for flexibility
+    for (let i = 1; i <= 20; i++) {
+      const key = process.env[`GEMINI_API_KEY_${i}`] || process.env[`VITE_GEMINI_API_KEY_${i}`];
+      if (key) keys.push(key);
+    }
+    res.json({ keys: Array.from(new Set(keys.filter(k => k.trim() !== ""))) });
+  });
+
   // API Routes
   app.post("/api/rooms", async (req, res) => {
     const { code, mode, data } = req.body;

@@ -6,7 +6,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 export const generateCase = async (): Promise<Case> => {
   const response = await ai.models.generateContent({
     model: "gemini-3-flash-preview",
-    contents: "Generate a detailed criminal case (Murder, Kidnapping, Theft, or Fraud) for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore, Kolkata), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, type (e.g., 'Murder Investigation'), description (a narrative of what happened), victim, crime scene, time, cause of death (or method of crime), 3 initial clues, 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
+    contents: "Generate a detailed criminal case (Murder, Kidnapping, Theft, or Fraud) for an AI Detective game set in India. Use Indian names (e.g., Rajesh, Priya, Vikram), Indian locations (e.g., Mumbai, Delhi, Bangalore), and Indian cultural contexts. The language should be Indian English (using terms like 'yaar', 'beta', 'ji', 'sir/madam', and typical Indian sentence structures). Include a title, type (e.g., 'Murder Investigation'), description (a narrative of what happened), victim, crime scene, time, cause of death (or method of crime), 3 initial clues, a 'worldContext' (defining common facts like names of household staff, layout of the house, and relationships to ensure all suspects agree on these details), a list of 3-4 'evidence' items (e.g., 'Forensic Report: Toxin found in tea', 'Phone Logs: No calls made between 10-11 PM'), 4 suspects (one is the culprit), and a hidden solution. Each suspect should have a name, description, personality, motive, alibi, secret, age, occupation, and 3 personality traits.",
     config: {
       responseMimeType: "application/json",
       responseSchema: {
@@ -20,6 +20,8 @@ export const generateCase = async (): Promise<Case> => {
           timeOfCrime: { type: Type.STRING },
           causeOfDeath: { type: Type.STRING },
           initialClues: { type: Type.ARRAY, items: { type: Type.STRING } },
+          worldContext: { type: Type.STRING },
+          evidence: { type: Type.ARRAY, items: { type: Type.STRING } },
           suspects: {
             type: Type.ARRAY,
             items: {
@@ -42,7 +44,7 @@ export const generateCase = async (): Promise<Case> => {
           },
           solution: { type: Type.STRING }
         },
-        required: ["title", "type", "description", "victim", "crimeScene", "timeOfCrime", "causeOfDeath", "initialClues", "suspects", "solution"]
+        required: ["title", "type", "description", "victim", "crimeScene", "timeOfCrime", "causeOfDeath", "initialClues", "worldContext", "evidence", "suspects", "solution"]
       }
     }
   });
@@ -62,6 +64,7 @@ export const interrogateSuspect = async (
     - Victim: ${caseInfo.victim}
     - Crime Scene: ${caseInfo.crimeScene}
     - Cause of Death: ${caseInfo.causeOfDeath}
+    - World Context (Common Facts): ${caseInfo.worldContext}
     - Your Personality: ${suspect.personality}
     - Your Motive: ${suspect.motive}
     - Your Alibi: ${suspect.alibi}
@@ -108,6 +111,17 @@ export const evaluateAccusation = async (
       The detective accused: ${accusedSuspect?.name}
       Detective's reasoning: ${reasoning}
       Detective's investigation notes: ${notes}
+
+      IMPORTANT: You must ONLY base your evaluation on the information provided in the case file below. Do NOT hallucinate evidence that was not explicitly given to the player.
+      Case File Data:
+      - Victim: ${caseInfo.victim}
+      - Crime Scene: ${caseInfo.crimeScene}
+      - Time: ${caseInfo.timeOfCrime}
+      - Cause: ${caseInfo.causeOfDeath}
+      - Initial Clues: ${caseInfo.initialClues.join(', ')}
+      - World Context: ${caseInfo.worldContext}
+      - Evidence Available to Player: ${caseInfo.evidence.join(', ')}
+      - Suspect Details: ${caseInfo.suspects.map(s => `${s.name} (${s.occupation}): Motive=${s.motive}, Alibi=${s.alibi}, Secret=${s.secret}`).join(' | ')}
 
       If the detective is WRONG (accused the wrong person):
       1. Explain why their reasoning for accusing ${accusedSuspect?.name} was flawed.

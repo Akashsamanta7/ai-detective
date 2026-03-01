@@ -3,42 +3,40 @@ import { Case, Suspect, Message } from "../types";
 
 /**
  * Multi-Key Rotation System
- * Collects all keys from environment variables (GEMINI_API_KEY, GEMINI_API_KEY_1, GEMINI_API_KEY_2, etc.)
+ * Fetches keys from the server-side endpoint to ensure they are always up-to-date
  */
-const getApiKeys = (): string[] => {
-  const keys: string[] = [];
-  
-  // 1. Standard platform key (injected by AI Studio)
-  if (process.env.GEMINI_API_KEY) {
-    keys.push(process.env.GEMINI_API_KEY);
-  }
+let apiKeys: string[] = [];
+let currentKeyIndex = 0;
+let keysLoaded = false;
 
-  // 2. Custom keys from import.meta.env (must be prefixed with VITE_)
-  // We check for VITE_GEMINI_API_KEY_1, VITE_GEMINI_API_KEY_2, etc.
-  const env = (import.meta as any).env || {};
-  for (let i = 1; i <= 20; i++) {
-    const key = env[`VITE_GEMINI_API_KEY_${i}`];
-    if (key) {
-      keys.push(key);
+const loadApiKeys = async () => {
+  if (keysLoaded) return;
+  try {
+    const res = await fetch('/api/config/keys');
+    if (res.ok) {
+      const data = await res.json();
+      apiKeys = data.keys || [];
+      console.log(`Detected ${apiKeys.length} API keys for rotation.`);
+      keysLoaded = true;
+    }
+  } catch (err) {
+    console.error("Failed to load API keys from server:", err);
+    // Fallback to platform-injected key if fetch fails
+    if (process.env.GEMINI_API_KEY) {
+      apiKeys = [process.env.GEMINI_API_KEY];
     }
   }
-  
-  // Remove duplicates and empty strings
-  const uniqueKeys = Array.from(new Set(keys.filter(k => k && k.trim() !== "")));
-  console.log(`Detected ${uniqueKeys.length} API keys for rotation.`);
-  return uniqueKeys;
 };
-
-let apiKeys = getApiKeys();
-let currentKeyIndex = 0;
 
 /**
  * Helper to get the current AI instance or rotate to the next one
  */
-const getAiInstance = (rotate = false) => {
+const getAiInstance = async (rotate = false) => {
+  await loadApiKeys();
+  
   if (apiKeys.length === 0) {
-    // Fallback if no keys are found (shouldn't happen if GEMINI_API_KEY is set)
-    return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+    // Fallback if no keys are found
+    return new GoogleGenAI({ apiKey: (process.env as any).GEMINI_API_KEY || "" });
   }
 
   if (rotate) {
@@ -54,7 +52,7 @@ const getAiInstance = (rotate = false) => {
  */
 async function callWithRetry<T>(fn: (ai: GoogleGenAI) => Promise<T>, maxRetries = 5): Promise<T> {
   let lastError: any;
-  let ai = getAiInstance();
+  let ai = await getAiInstance();
 
   for (let i = 0; i < maxRetries; i++) {
     try {
@@ -68,7 +66,7 @@ async function callWithRetry<T>(fn: (ai: GoogleGenAI) => Promise<T>, maxRetries 
         // If we have multiple keys, rotate immediately
         if (apiKeys.length > 1) {
           console.warn(`Rate limit hit on Key #${currentKeyIndex + 1}. Rotating...`);
-          ai = getAiInstance(true);
+          ai = await getAiInstance(true);
           // Small delay before retry with new key
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;

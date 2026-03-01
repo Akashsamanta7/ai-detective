@@ -7,17 +7,26 @@ import { Case, Suspect, Message } from "../types";
  */
 const getApiKeys = (): string[] => {
   const keys: string[] = [];
-  // Standard key
-  if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
   
-  // Additional keys (up to 20)
+  // 1. Standard platform key (injected by AI Studio)
+  if (process.env.GEMINI_API_KEY) {
+    keys.push(process.env.GEMINI_API_KEY);
+  }
+
+  // 2. Custom keys from import.meta.env (must be prefixed with VITE_)
+  // We check for VITE_GEMINI_API_KEY_1, VITE_GEMINI_API_KEY_2, etc.
+  const env = (import.meta as any).env || {};
   for (let i = 1; i <= 20; i++) {
-    const key = (process.env as any)[`GEMINI_API_KEY_${i}`];
-    if (key) keys.push(key);
+    const key = env[`VITE_GEMINI_API_KEY_${i}`];
+    if (key) {
+      keys.push(key);
+    }
   }
   
   // Remove duplicates and empty strings
-  return Array.from(new Set(keys.filter(k => k.trim() !== "")));
+  const uniqueKeys = Array.from(new Set(keys.filter(k => k && k.trim() !== "")));
+  console.log(`Detected ${uniqueKeys.length} API keys for rotation.`);
+  return uniqueKeys;
 };
 
 let apiKeys = getApiKeys();

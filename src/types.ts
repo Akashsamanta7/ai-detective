@@ -31,6 +31,8 @@ export interface Case {
   timeOfCrime: string;
   causeOfDeath: string;
   initialClues: string[];
+  worldContext: string; // Common facts about the household/environment
+  evidence: string[]; // Forensic reports, phone logs, etc.
   suspects: Suspect[];
   solution: string;
 }

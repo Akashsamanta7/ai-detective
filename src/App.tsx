@@ -515,7 +515,7 @@ export default function App() {
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-32 md:pb-6">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-40 md:pb-48">
               {investigation.chatHistory[investigation.currentSuspectId]?.map((msg, i) => (
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   {msg.sender && msg.sender !== investigation.myPlayerId && (
@@ -722,6 +722,13 @@ export default function App() {
                     </p>
                   </div>
 
+                  <div>
+                    <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">World Context (Common Facts)</h4>
+                    <p className="text-sm text-zinc-400 leading-relaxed bg-zinc-950 p-4 rounded-xl border border-zinc-800">
+                      {investigation.case?.worldContext}
+                    </p>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-zinc-950 p-4 rounded-xl border border-zinc-800">
                       <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Victim</h4>
@@ -747,6 +754,17 @@ export default function App() {
                       {investigation.case?.initialClues.map((clue, i) => (
                         <li key={i} className="text-sm text-zinc-300 flex gap-2">
                           <span className="text-zinc-600">•</span> {clue}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div>
+                    <h4 className="text-[10px] font-mono text-zinc-500 uppercase mb-2">Forensic Evidence & Logs</h4>
+                    <ul className="space-y-2">
+                      {investigation.case?.evidence.map((item, i) => (
+                        <li key={i} className="text-sm text-emerald-500/80 flex gap-2 bg-emerald-900/10 p-3 rounded-lg border border-emerald-900/20">
+                          <AlertCircle size={16} className="shrink-0" /> {item}
                         </li>
                       ))}
                     </ul>

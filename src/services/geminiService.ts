@@ -60,21 +60,31 @@ async function callWithRetry<T>(fn: (ai: GoogleGenAI) => Promise<T>, maxRetries 
     } catch (error: any) {
       lastError = error;
       const errorMsg = error.message || "";
-      const isRateLimit = errorMsg.includes('429') || error.status === 429 || errorMsg.includes('Quota exceeded');
+      const status = error.status || (error as any).code;
+      
+      // Check for rate limits (429) or server overload (503)
+      const isRetryable = 
+        errorMsg.includes('429') || 
+        errorMsg.includes('503') || 
+        status === 429 || 
+        status === 503 || 
+        errorMsg.includes('Quota exceeded') ||
+        errorMsg.includes('high demand') ||
+        errorMsg.includes('UNAVAILABLE');
 
-      if (isRateLimit) {
+      if (isRetryable) {
         // If we have multiple keys, rotate immediately
         if (apiKeys.length > 1) {
-          console.warn(`Rate limit hit on Key #${currentKeyIndex + 1}. Rotating...`);
+          console.warn(`API issue (${status}) hit on Key #${currentKeyIndex + 1}. Rotating...`);
           ai = await getAiInstance(true);
           // Small delay before retry with new key
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           continue;
         }
 
         // If only one key, use exponential backoff
-        const waitTime = Math.pow(2, i) * 2000 + Math.random() * 1000;
-        console.warn(`Rate limit hit (Single Key). Retrying in ${Math.round(waitTime)}ms... (Attempt ${i + 1}/${maxRetries})`);
+        const waitTime = Math.pow(2, i) * 3000 + Math.random() * 1000;
+        console.warn(`API issue (${status}). Retrying in ${Math.round(waitTime)}ms... (Attempt ${i + 1}/${maxRetries})`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
         continue;
       }

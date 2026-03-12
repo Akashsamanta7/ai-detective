@@ -52,7 +52,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState<string | null>(null);
   const [showBriefingModal, setShowBriefingModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'sidebar' | 'notes'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'case' | 'evidence'>('chat');
   const [isConnected, setIsConnected] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -449,8 +449,8 @@ export default function App() {
 
   const renderInvestigation = () => (
     <div className="flex flex-col md:flex-row h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Left Sidebar: Suspects & Evidence - Hidden on mobile unless activeTab is 'sidebar' */}
-      <div className={`${activeTab === 'sidebar' ? 'flex' : 'hidden'} md:flex w-full md:w-72 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
+      {/* Left Sidebar: Suspects, Notes & Actions - Hidden on mobile unless activeTab is 'case' */}
+      <div className={`${activeTab === 'case' ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 md:p-6 border-b border-zinc-800">
             <div className="flex justify-between items-center mb-4">
@@ -492,25 +492,17 @@ export default function App() {
             </div>
           </div>
 
-          <div className="p-4 md:p-6 border-b border-zinc-800">
+          <div className="p-4 md:p-6 flex flex-col">
             <div className="flex items-center gap-2 mb-4">
-              <Search size={16} className="text-zinc-500" />
-              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Evidence</h3>
+              <BookOpen size={16} className="text-zinc-500" />
+              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
             </div>
-            <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2">
-              {investigation.case?.evidence.map((item, i) => (
-                <div key={i} className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex gap-2 leading-relaxed">
-                  <AlertCircle size={12} className="shrink-0 mt-0.5 text-emerald-500/50" />
-                  {item}
-                </div>
-              ))}
-              {investigation.case?.initialClues.map((clue, i) => (
-                <div key={`clue-${i}`} className="p-3 bg-zinc-900/30 border border-zinc-800/50 rounded-xl text-[11px] text-zinc-500 flex gap-2 leading-relaxed italic">
-                  <Info size={12} className="shrink-0 mt-0.5" />
-                  {clue}
-                </div>
-              ))}
-            </div>
+            <textarea
+              value={investigation.notes}
+              onChange={(e) => updateNotes(e.target.value)}
+              placeholder="Record clues, contradictions, and theories..."
+              className="w-full h-64 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none custom-scrollbar"
+            />
           </div>
         </div>
 
@@ -524,9 +516,9 @@ export default function App() {
           </button>
           <button 
             onClick={() => setGameState(GameState.ACCUSATION)}
-            className="w-full py-3 bg-red-900/20 text-red-500 border border-red-900/50 rounded-xl font-bold hover:bg-red-900/30 transition-all flex items-center justify-center gap-2 text-xs"
+            className="w-full py-4 bg-red-900/20 text-red-500 border border-red-900/50 rounded-xl font-bold hover:bg-red-900/30 transition-all flex items-center justify-center gap-2 text-sm"
           >
-            <Gavel size={16} />
+            <Gavel size={18} />
             MAKE ACCUSATION
           </button>
         </div>
@@ -619,7 +611,7 @@ export default function App() {
             <h2 className="text-lg md:text-xl font-medium mb-2">Select a Suspect</h2>
             <p className="text-zinc-500 max-w-sm text-sm">Choose a suspect from the sidebar to begin interrogation. Watch for contradictions and hidden motives.</p>
             <button 
-              onClick={() => setActiveTab('sidebar')}
+              onClick={() => setActiveTab('case')}
               className="mt-6 md:hidden px-6 py-2 bg-zinc-800 text-white rounded-full text-sm font-bold"
             >
               OPEN SUSPECT LIST
@@ -628,20 +620,28 @@ export default function App() {
         )}
       </div>
 
-      {/* Right Sidebar: Notes - Hidden on mobile unless activeTab is 'notes' */}
-      <div className={`${activeTab === 'notes' ? 'flex' : 'hidden'} md:flex w-full md:w-72 border-l border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
-        <div className="p-4 md:p-6 flex flex-col h-full">
+      {/* Right Sidebar: Evidence - Hidden on mobile unless activeTab is 'evidence' */}
+      <div className={`${activeTab === 'evidence' ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-l border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
+        <div className="p-4 md:p-6 flex flex-col h-full overflow-hidden">
           <div className="flex items-center gap-2 mb-4">
-            <BookOpen size={16} className="text-zinc-500" />
-            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
+            <Search size={16} className="text-zinc-500" />
+            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Evidence & Clues</h3>
           </div>
-          <textarea
-            value={investigation.notes}
-            onChange={(e) => updateNotes(e.target.value)}
-            placeholder="Record clues, contradictions, and theories..."
-            className="w-full flex-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none custom-scrollbar mb-16 md:mb-0"
-          />
-          <div className="hidden md:block mt-4 px-1">
+          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-2 pb-20 md:pb-4">
+            {investigation.case?.evidence.map((item, i) => (
+              <div key={i} className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl text-xs text-zinc-300 flex gap-3 leading-relaxed">
+                <AlertCircle size={14} className="shrink-0 mt-0.5 text-emerald-500/50" />
+                {item}
+              </div>
+            ))}
+            {investigation.case?.initialClues.map((clue, i) => (
+              <div key={`clue-${i}`} className="p-4 bg-zinc-900/30 border border-zinc-800/50 rounded-2xl text-xs text-zinc-400 flex gap-3 leading-relaxed italic">
+                <Info size={14} className="shrink-0 mt-0.5" />
+                {clue}
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block mt-4 pt-4 border-t border-zinc-800 px-1">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono text-zinc-600 uppercase">Room Code</span>
               <span className="text-[10px] font-mono text-white">{investigation.code}</span>
@@ -653,10 +653,10 @@ export default function App() {
       {/* Mobile Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-zinc-950 border-t border-zinc-800 flex items-center justify-around z-30 px-4">
         <button 
-          onClick={() => setActiveTab('sidebar')}
-          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'sidebar' ? 'text-white' : 'text-zinc-500'}`}
+          onClick={() => setActiveTab('case')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'case' ? 'text-white' : 'text-zinc-500'}`}
         >
-          <Search size={20} />
+          <User size={20} />
           <span className="text-[10px] font-mono uppercase">Case</span>
         </button>
         <button 
@@ -667,11 +667,11 @@ export default function App() {
           <span className="text-[10px] font-mono uppercase">Chat</span>
         </button>
         <button 
-          onClick={() => setActiveTab('notes')}
-          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'notes' ? 'text-white' : 'text-zinc-500'}`}
+          onClick={() => setActiveTab('evidence')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'evidence' ? 'text-white' : 'text-zinc-500'}`}
         >
-          <BookOpen size={20} />
-          <span className="text-[10px] font-mono uppercase">Notes</span>
+          <Search size={20} />
+          <span className="text-[10px] font-mono uppercase">Evidence</span>
         </button>
       </div>
 

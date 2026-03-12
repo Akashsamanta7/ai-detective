@@ -148,8 +148,11 @@ export default function App() {
 
       setInvestigation(prev => ({ ...prev, ...initialData }));
       setGameState(GameState.BRIEFING);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to create room:", error);
+      let msg = "Failed to generate case. Please try again.";
+      if (error.message?.includes('429')) msg = "AI Quota exceeded. Please wait a minute.";
+      alert(msg);
       setGameState(GameState.START);
     } finally {
       setLoading(false);
@@ -231,8 +234,21 @@ export default function App() {
       }));
       broadcast('SYNC_CHAT', { suspectId: suspect.id, message: modelMessage });
       syncWithServer({ chatHistory: { ...investigation.chatHistory, [suspect.id]: finalHistory } });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Interrogation failed:", error);
+      let errorMessage = "Interrogation failed. Please try again.";
+      if (error.message?.includes('429') || error.message?.includes('Quota exceeded')) {
+        errorMessage = "AI Quota exceeded. Please wait a minute before asking another question.";
+      }
+      
+      const errorMsg: Message = { role: 'model', text: `[SYSTEM]: ${errorMessage}` };
+      setInvestigation(prev => ({
+        ...prev,
+        chatHistory: {
+          ...prev.chatHistory,
+          [suspect.id]: [...updatedHistory, errorMsg]
+        }
+      }));
     } finally {
       setLoading(false);
     }
@@ -256,8 +272,11 @@ export default function App() {
       broadcast('SYNC_ACCUSATION', result);
       syncWithServer({ accusationResult: result });
       setGameState(GameState.EVALUATION);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Evaluation failed:", error);
+      let msg = "Evaluation failed. Please try again.";
+      if (error.message?.includes('429')) msg = "AI Quota exceeded. Please wait a minute.";
+      alert(msg);
     } finally {
       setLoading(false);
     }
@@ -393,15 +412,28 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
-            <h3 className="text-sm font-mono text-zinc-500 uppercase mb-4">Initial Clues</h3>
-            <ul className="space-y-2">
-              {investigation.case?.initialClues.map((clue, i) => (
-                <li key={i} className="text-zinc-300 flex gap-2">
-                  <span className="text-zinc-600">•</span> {clue}
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-6">
+            <div className="bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
+              <h3 className="text-sm font-mono text-zinc-500 uppercase mb-4">Initial Clues</h3>
+              <ul className="space-y-2">
+                {investigation.case?.initialClues.map((clue, i) => (
+                  <li key={i} className="text-zinc-300 flex gap-2 text-sm">
+                    <span className="text-zinc-600">•</span> {clue}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="bg-emerald-900/5 p-6 rounded-2xl border border-emerald-900/20">
+              <h3 className="text-sm font-mono text-emerald-500/50 uppercase mb-4">Forensic Evidence</h3>
+              <ul className="space-y-2">
+                {investigation.case?.evidence.map((item, i) => (
+                  <li key={i} className="text-emerald-500/80 flex gap-2 text-sm">
+                    <AlertCircle size={14} className="shrink-0 mt-0.5" /> {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </div>
 
@@ -455,6 +487,27 @@ export default function App() {
                   >
                     <Info size={14} />
                   </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="p-4 md:p-6 border-b border-zinc-800">
+            <div className="flex items-center gap-2 mb-4">
+              <Search size={16} className="text-zinc-500" />
+              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Evidence</h3>
+            </div>
+            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+              {investigation.case?.evidence.map((item, i) => (
+                <div key={i} className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex gap-2 leading-relaxed">
+                  <AlertCircle size={12} className="shrink-0 mt-0.5 text-emerald-500/50" />
+                  {item}
+                </div>
+              ))}
+              {investigation.case?.initialClues.map((clue, i) => (
+                <div key={`clue-${i}`} className="p-3 bg-zinc-900/30 border border-zinc-800/50 rounded-xl text-[11px] text-zinc-500 flex gap-2 leading-relaxed italic">
+                  <Info size={12} className="shrink-0 mt-0.5" />
+                  {clue}
                 </div>
               ))}
             </div>

@@ -52,7 +52,7 @@ export default function App() {
   const [copied, setCopied] = useState(false);
   const [showProfile, setShowProfile] = useState<string | null>(null);
   const [showBriefingModal, setShowBriefingModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'sidebar'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'sidebar' | 'notes'>('chat');
   const [isConnected, setIsConnected] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -449,8 +449,8 @@ export default function App() {
 
   const renderInvestigation = () => (
     <div className="flex flex-col md:flex-row h-screen bg-[#0a0a0a] text-white overflow-hidden">
-      {/* Sidebar: Suspects & Notes - Hidden on mobile unless activeTab is 'sidebar' */}
-      <div className={`${activeTab === 'sidebar' ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
+      {/* Left Sidebar: Suspects & Evidence - Hidden on mobile unless activeTab is 'sidebar' */}
+      <div className={`${activeTab === 'sidebar' ? 'flex' : 'hidden'} md:flex w-full md:w-72 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 md:p-6 border-b border-zinc-800">
             <div className="flex justify-between items-center mb-4">
@@ -477,7 +477,7 @@ export default function App() {
                     }`}
                   >
                     <div className={`w-2 h-2 rounded-full ${investigation.currentSuspectId === suspect.id ? 'bg-black' : 'bg-zinc-700'}`} />
-                    <span className="font-medium flex-1 truncate">{suspect.name}</span>
+                    <span className="font-medium flex-1 truncate text-sm">{suspect.name}</span>
                   </button>
                   <button 
                     onClick={() => setShowProfile(suspect.id)}
@@ -497,7 +497,7 @@ export default function App() {
               <Search size={16} className="text-zinc-500" />
               <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Evidence</h3>
             </div>
-            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+            <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-2">
               {investigation.case?.evidence.map((item, i) => (
                 <div key={i} className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex gap-2 leading-relaxed">
                   <AlertCircle size={12} className="shrink-0 mt-0.5 text-emerald-500/50" />
@@ -512,38 +512,21 @@ export default function App() {
               ))}
             </div>
           </div>
-
-          <div className="p-4 md:p-6 flex flex-col">
-            <div className="flex items-center gap-2 mb-4">
-              <BookOpen size={16} className="text-zinc-500" />
-              <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
-            </div>
-            <textarea
-              value={investigation.notes}
-              onChange={(e) => updateNotes(e.target.value)}
-              placeholder="Record clues, contradictions, and theories..."
-              className="w-full h-48 md:h-64 bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none"
-            />
-          </div>
         </div>
 
         <div className="p-4 md:p-6 border-t border-zinc-800 space-y-3 bg-[#0a0a0a] shrink-0 mb-16 md:mb-0">
           <button 
             onClick={() => setShowBriefingModal(true)}
-            className="w-full py-3 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-xl font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 bg-zinc-900 text-zinc-400 border border-zinc-800 rounded-xl font-bold hover:bg-zinc-800 transition-all flex items-center justify-center gap-2 text-xs"
           >
-            <AlertCircle size={18} />
+            <AlertCircle size={16} />
             CASE BRIEFING
           </button>
-          <div className="flex items-center justify-between px-1">
-            <span className="text-[10px] font-mono text-zinc-600 uppercase">Room Code</span>
-            <span className="text-[10px] font-mono text-white">{investigation.code}</span>
-          </div>
           <button 
             onClick={() => setGameState(GameState.ACCUSATION)}
-            className="w-full py-3 bg-red-900/20 text-red-500 border border-red-900/50 rounded-xl font-bold hover:bg-red-900/30 transition-all flex items-center justify-center gap-2"
+            className="w-full py-3 bg-red-900/20 text-red-500 border border-red-900/50 rounded-xl font-bold hover:bg-red-900/30 transition-all flex items-center justify-center gap-2 text-xs"
           >
-            <Gavel size={18} />
+            <Gavel size={16} />
             MAKE ACCUSATION
           </button>
         </div>
@@ -645,13 +628,35 @@ export default function App() {
         )}
       </div>
 
+      {/* Right Sidebar: Notes - Hidden on mobile unless activeTab is 'notes' */}
+      <div className={`${activeTab === 'notes' ? 'flex' : 'hidden'} md:flex w-full md:w-72 border-l border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
+        <div className="p-4 md:p-6 flex flex-col h-full">
+          <div className="flex items-center gap-2 mb-4">
+            <BookOpen size={16} className="text-zinc-500" />
+            <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Shared Notes</h3>
+          </div>
+          <textarea
+            value={investigation.notes}
+            onChange={(e) => updateNotes(e.target.value)}
+            placeholder="Record clues, contradictions, and theories..."
+            className="w-full flex-1 bg-zinc-900/50 border border-zinc-800 rounded-2xl p-4 text-sm text-zinc-300 focus:outline-none focus:border-zinc-600 resize-none custom-scrollbar mb-16 md:mb-0"
+          />
+          <div className="hidden md:block mt-4 px-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-zinc-600 uppercase">Room Code</span>
+              <span className="text-[10px] font-mono text-white">{investigation.code}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Mobile Navigation Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-zinc-950 border-t border-zinc-800 flex items-center justify-around z-30 px-4">
         <button 
           onClick={() => setActiveTab('sidebar')}
           className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'sidebar' ? 'text-white' : 'text-zinc-500'}`}
         >
-          <BookOpen size={20} />
+          <Search size={20} />
           <span className="text-[10px] font-mono uppercase">Case</span>
         </button>
         <button 
@@ -660,6 +665,13 @@ export default function App() {
         >
           <MessageSquare size={20} />
           <span className="text-[10px] font-mono uppercase">Chat</span>
+        </button>
+        <button 
+          onClick={() => setActiveTab('notes')}
+          className={`flex flex-col items-center gap-1 transition-colors ${activeTab === 'notes' ? 'text-white' : 'text-zinc-500'}`}
+        >
+          <BookOpen size={20} />
+          <span className="text-[10px] font-mono uppercase">Notes</span>
         </button>
       </div>
 

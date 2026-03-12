@@ -50,7 +50,10 @@ async function startServer() {
       const key = process.env[`GEMINI_API_KEY_${i}`] || process.env[`VITE_GEMINI_API_KEY_${i}`];
       if (key) keys.push(key);
     }
-    res.json({ keys: Array.from(new Set(keys.filter(k => k.trim() !== ""))) });
+
+    res.json({ 
+      keys: Array.from(new Set(keys.filter(k => k.trim() !== "")))
+    });
   });
 
   // API Routes

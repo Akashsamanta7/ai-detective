@@ -19,10 +19,18 @@ import {
   Users,
   Copy,
   Check,
-  Info
+  Info,
+  Mic,
+  MicOff,
+  Volume2,
+  VolumeX,
+  Radio,
+  Shield,
+  ShieldAlert
 } from 'lucide-react';
 import { GameState, Case, Suspect, Message, InvestigationState, RoomData } from './types';
-import { generateCase, interrogateSuspect, evaluateAccusation } from './services/geminiService';
+import { generateCase, interrogateSuspect, evaluateAccusation, getVoiceForGender } from './services/geminiService';
+import { GoogleGenAI, Modality } from "@google/genai";
 
 const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -56,9 +64,27 @@ export default function App() {
   const [isChiefConsultation, setIsChiefConsultation] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
+  const [partnerSpeaking, setPartnerSpeaking] = useState(false);
+  
+  // Voice States
+  const [isMuted, setIsMuted] = useState(true);
+  const [voiceMode, setVoiceMode] = useState<'PRIVATE' | 'INTERROGATION'>('PRIVATE');
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [aiTranscription, setAiTranscription] = useState('');
+  
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  
+  // Audio Refs
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const liveSessionRef = useRef<any>(null);
+  const partnerAudioQueueRef = useRef<Float32Array[]>([]);
+  const aiAudioQueueRef = useRef<Float32Array[]>([]);
+  const isPlayingPartnerRef = useRef(false);
+  const isPlayingAiRef = useRef(false);
 
   const scrollToBottom = () => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -107,10 +133,23 @@ export default function App() {
         } else if (data.type === 'SYNC_ACCUSATION') {
           setInvestigation(prev => ({ ...prev, accusationResult: data.payload }));
           setGameState(GameState.EVALUATION);
+        } else if (data.type === 'AUDIO_CHUNK') {
+          const audioData = new Float32Array(data.payload);
+          partnerAudioQueueRef.current.push(audioData);
+          setPartnerSpeaking(true);
+          if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+          typingTimeoutRef.current = setTimeout(() => setPartnerSpeaking(false), 1000);
+          if (!isPlayingPartnerRef.current) {
+            playNextPartnerChunk();
+          }
         }
       };
 
-      return () => socket.close();
+      return () => {
+        socket.close();
+        stopMic();
+        stopLiveSession();
+      };
     }
   }, [investigation.code]);
 
@@ -119,6 +158,197 @@ export default function App() {
       socketRef.current.send(JSON.stringify({ type, payload }));
     }
   };
+
+  // --- VOICE LOGIC ---
+  const initAudio = async () => {
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+    }
+    if (audioContextRef.current.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+  };
+
+  const playNextPartnerChunk = () => {
+    if (partnerAudioQueueRef.current.length === 0 || !audioContextRef.current) {
+      isPlayingPartnerRef.current = false;
+      return;
+    }
+    isPlayingPartnerRef.current = true;
+    const chunk = partnerAudioQueueRef.current.shift()!;
+    const buffer = audioContextRef.current.createBuffer(1, chunk.length, 16000);
+    buffer.copyToChannel(chunk, 0);
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContextRef.current.destination);
+    source.onended = playNextPartnerChunk;
+    source.start();
+  };
+
+  const playNextAiChunk = () => {
+    if (aiAudioQueueRef.current.length === 0 || !audioContextRef.current) {
+      isPlayingAiRef.current = false;
+      return;
+    }
+    isPlayingAiRef.current = true;
+    const chunk = aiAudioQueueRef.current.shift()!;
+    const buffer = audioContextRef.current.createBuffer(1, chunk.length, 16000);
+    buffer.copyToChannel(chunk, 0);
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContextRef.current.destination);
+    source.onended = playNextAiChunk;
+    source.start();
+  };
+
+  const startMic = async () => {
+    try {
+      await initAudio();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      
+      const source = audioContextRef.current!.createMediaStreamSource(stream);
+      const processor = audioContextRef.current!.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (e) => {
+        if (isMuted) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+        
+        // Send to partner
+        broadcast('AUDIO_CHUNK', Array.from(inputData));
+
+        // Send to Gemini if in interrogation mode
+        if (voiceMode === 'INTERROGATION' && liveSessionRef.current) {
+          // Convert to 16-bit PCM for Gemini
+          const pcmData = new Int16Array(inputData.length);
+          for (let i = 0; i < inputData.length; i++) {
+            pcmData[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+          }
+          const base64Data = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+          liveSessionRef.current.sendRealtimeInput({
+            audio: { data: base64Data, mimeType: 'audio/pcm;rate=16000' }
+          });
+        }
+      };
+
+      source.connect(processor);
+      processor.connect(audioContextRef.current!.destination);
+      setIsMuted(false);
+    } catch (err) {
+      console.error("Mic access denied:", err);
+      alert("Microphone access is required for voice mode.");
+    }
+  };
+
+  const stopMic = () => {
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach(track => track.stop());
+      micStreamRef.current = null;
+    }
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
+    }
+    setIsMuted(true);
+  };
+
+  const startLiveSession = async (suspect: Suspect) => {
+    if (liveSessionRef.current) return;
+    
+    try {
+      const res = await fetch('/api/config/keys');
+      const { keys } = await res.json();
+      const apiKey = keys[0]; // Use first key
+      const ai = new GoogleGenAI({ apiKey });
+
+      const session = await ai.live.connect({
+        model: "gemini-2.5-flash-native-audio-preview-12-2025",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: isChiefConsultation ? 'Zephyr' : getVoiceForGender(suspect.gender) } },
+          },
+          systemInstruction: isChiefConsultation 
+            ? `You are the Chief Officer, a seasoned detective mentor. You know everything about the case. Guide the detectives without giving the answer. Use Indian English.`
+            : `You are ${suspect.name}, a suspect in a ${investigation.case?.type} case. Stay in character. Use Indian English.`,
+          outputAudioTranscription: {},
+        },
+        callbacks: {
+          onopen: () => setIsLiveActive(true),
+          onmessage: async (message) => {
+            if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
+              const base64Audio = message.serverContent.modelTurn.parts[0].inlineData.data;
+              const binaryString = atob(base64Audio);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+              
+              const pcmData = new Int16Array(bytes.buffer);
+              const floatData = new Float32Array(pcmData.length);
+              for (let i = 0; i < pcmData.length; i++) floatData[i] = pcmData[i] / 32768;
+              
+              aiAudioQueueRef.current.push(floatData);
+              if (!isPlayingAiRef.current) playNextAiChunk();
+            }
+            
+            if (message.serverContent?.modelTurn?.parts?.[0]?.text) {
+              const text = message.serverContent.modelTurn.parts[0].text;
+              setAiTranscription(prev => prev + text);
+            }
+
+            if (message.serverContent?.turnComplete) {
+              setAiTranscription(prev => {
+                if (prev) {
+                  const modelMessage: Message = { role: 'model', text: prev };
+                  if (isChiefConsultation) {
+                    setInvestigation(p => {
+                      const updated = [...(p.chiefChatHistory || []), modelMessage];
+                      broadcast('SYNC_CHIEF_CHAT', modelMessage);
+                      return { ...p, chiefChatHistory: updated };
+                    });
+                  } else if (investigation.currentSuspectId) {
+                    const sid = investigation.currentSuspectId;
+                    setInvestigation(p => {
+                      const updated = [...(p.chatHistory[sid] || []), modelMessage];
+                      broadcast('SYNC_CHAT', { suspectId: sid, message: modelMessage });
+                      return { ...p, chatHistory: { ...p.chatHistory, [sid]: updated } };
+                    });
+                  }
+                }
+                return '';
+              });
+            }
+          },
+          onclose: () => {
+            setIsLiveActive(false);
+            liveSessionRef.current = null;
+          },
+          onerror: (err) => console.error("Live API error:", err),
+        }
+      });
+      liveSessionRef.current = session;
+    } catch (err) {
+      console.error("Failed to connect to Live API:", err);
+    }
+  };
+
+  const stopLiveSession = () => {
+    if (liveSessionRef.current) {
+      liveSessionRef.current.close();
+      liveSessionRef.current = null;
+      setIsLiveActive(false);
+    }
+  };
+
+  useEffect(() => {
+    setAiTranscription('');
+    if (voiceMode === 'INTERROGATION' && (investigation.currentSuspectId || isChiefConsultation) && !isMuted) {
+      const suspect = investigation.case?.suspects.find(s => s.id === investigation.currentSuspectId);
+      startLiveSession(suspect || {} as Suspect);
+    } else {
+      stopLiveSession();
+    }
+  }, [voiceMode, investigation.currentSuspectId, isChiefConsultation, isMuted]);
 
   const syncWithServer = async (updatedData: Partial<RoomData>) => {
     const newData = { ...investigation, ...updatedData };
@@ -531,6 +761,13 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
                 <div className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'}`} title={isConnected ? "Live Connected" : "Disconnected"} />
+                {partnerSpeaking && (
+                  <div className="flex gap-0.5 items-center ml-2">
+                    <div className="w-0.5 h-2 bg-emerald-500 animate-pulse" />
+                    <div className="w-0.5 h-3 bg-emerald-500 animate-pulse" style={{ animationDelay: '100ms' }} />
+                    <div className="w-0.5 h-2 bg-emerald-500 animate-pulse" style={{ animationDelay: '200ms' }} />
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-1 text-[10px] font-mono text-zinc-600">
                 <Users size={10} /> {investigation.players.length} ACTIVE
@@ -612,15 +849,55 @@ export default function App() {
                   {isChiefConsultation ? "Consultation in progress" : "Interrogation in progress"}
                 </p>
               </div>
-              {!isChiefConsultation && (
-                <button 
-                  onClick={() => setShowProfile(investigation.currentSuspectId)}
-                  className="flex items-center gap-2 text-[10px] md:text-xs font-mono text-zinc-500 hover:text-white transition-colors"
+              <div className="flex items-center gap-4">
+                <div className="flex items-center bg-zinc-900 rounded-full border border-zinc-800 p-1">
+                  <button
+                    onClick={() => setVoiceMode('PRIVATE')}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-2 ${
+                      voiceMode === 'PRIVATE' ? 'bg-zinc-100 text-black' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    <Shield size={12} /> PRIVATE
+                  </button>
+                  <button
+                    onClick={() => setVoiceMode('INTERROGATION')}
+                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all flex items-center gap-2 ${
+                      voiceMode === 'INTERROGATION' ? 'bg-red-600 text-white' : 'text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    <ShieldAlert size={12} /> ON RECORD
+                  </button>
+                </div>
+                
+                <button
+                  onClick={isMuted ? startMic : stopMic}
+                  className={`p-3 rounded-full transition-all ${
+                    isMuted ? 'bg-zinc-800 text-zinc-500' : 'bg-red-600 text-white animate-pulse'
+                  }`}
                 >
-                  <span className="hidden sm:inline">VIEW PROFILE</span> <Info size={14} />
+                  {isMuted ? <MicOff size={20} /> : <Mic size={20} />}
                 </button>
-              )}
+
+                {!isChiefConsultation && (
+                  <button 
+                    onClick={() => setShowProfile(investigation.currentSuspectId)}
+                    className="flex items-center gap-2 text-[10px] md:text-xs font-mono text-zinc-500 hover:text-white transition-colors"
+                  >
+                    <span className="hidden sm:inline">VIEW PROFILE</span> <Info size={14} />
+                  </button>
+                )}
+              </div>
             </div>
+
+            {isLiveActive && aiTranscription && (
+              <div className="bg-zinc-900/80 border-b border-zinc-800 p-3 text-xs text-zinc-400 font-mono italic">
+                <div className="flex items-center gap-2 mb-1">
+                  <Radio size={12} className="text-red-500 animate-pulse" />
+                  <span>LIVE TRANSCRIPTION:</span>
+                </div>
+                {aiTranscription}
+              </div>
+            )}
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-40 md:pb-48">
               {(isChiefConsultation ? investigation.chiefChatHistory : investigation.chatHistory[investigation.currentSuspectId!])?.map((msg, i) => (

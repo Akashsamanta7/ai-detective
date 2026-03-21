@@ -17,6 +17,7 @@ export interface Suspect {
   alibi: string;
   isCulprit: boolean;
   secret: string;
+  gender: 'MALE' | 'FEMALE' | 'NON-BINARY';
   age?: string;
   occupation?: string;
   traits?: string[];

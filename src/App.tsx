@@ -53,6 +53,7 @@ export default function App() {
   const [showProfile, setShowProfile] = useState<string | null>(null);
   const [showBriefingModal, setShowBriefingModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'case' | 'evidence'>('chat');
+  const [isChiefConsultation, setIsChiefConsultation] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [partnerTyping, setPartnerTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -91,6 +92,11 @@ export default function App() {
               ...prev.chatHistory,
               [suspectId]: [...(prev.chatHistory[suspectId] || []), message]
             }
+          }));
+        } else if (data.type === 'SYNC_CHIEF_CHAT') {
+          setInvestigation(prev => ({
+            ...prev,
+            chiefChatHistory: [...(prev.chiefChatHistory || []), data.payload]
           }));
         } else if (data.type === 'SYNC_TYPING') {
           setPartnerTyping(data.payload);
@@ -136,6 +142,7 @@ export default function App() {
         case: newCase,
         notes: '',
         chatHistory: {},
+        chiefChatHistory: [],
         players: [investigation.myPlayerId],
         currentSuspectId: null,
       };
@@ -195,62 +202,106 @@ export default function App() {
   };
 
   const handleSendMessage = async () => {
-    if (!inputText.trim() || !investigation.currentSuspectId || !investigation.case) return;
+    if (!inputText.trim() || !investigation.case || loading) return;
+    
+    if (!isChiefConsultation && !investigation.currentSuspectId) {
+      alert("Please select a suspect to interrogate or consult the Chief Officer.");
+      return;
+    }
 
     broadcast('SYNC_TYPING', false);
-    const suspect = investigation.case.suspects.find(s => s.id === investigation.currentSuspectId)!;
-    const currentHistory = investigation.chatHistory[suspect.id] || [];
     
     const newUserMessage: Message = { 
       role: 'user', 
       text: inputText, 
       sender: investigation.myPlayerId 
     };
-    const updatedHistory = [...currentHistory, newUserMessage];
 
-    setInvestigation(prev => ({
-      ...prev,
-      chatHistory: {
-        ...prev.chatHistory,
-        [suspect.id]: updatedHistory
-      }
-    }));
-    broadcast('SYNC_CHAT', { suspectId: suspect.id, message: newUserMessage });
-    
-    setInputText('');
-    setLoading(true);
-
-    try {
-      const responseText = await interrogateSuspect(suspect, investigation.case, currentHistory, inputText);
-      const modelMessage: Message = { role: 'model', text: responseText };
+    if (isChiefConsultation) {
+      const currentHistory = investigation.chiefChatHistory || [];
+      const updatedHistory = [...currentHistory, newUserMessage];
       
-      const finalHistory = [...updatedHistory, modelMessage];
+      setInvestigation(prev => ({
+        ...prev,
+        chiefChatHistory: updatedHistory
+      }));
+      broadcast('SYNC_CHIEF_CHAT', newUserMessage);
+      
+      setInputText('');
+      setLoading(true);
+
+      try {
+        const { consultChiefOfficer } = await import('./services/geminiService');
+        const responseText = await consultChiefOfficer(investigation.case, currentHistory, inputText);
+        const modelMessage: Message = { role: 'model', text: responseText };
+        const finalHistory = [...updatedHistory, modelMessage];
+        
+        setInvestigation(prev => ({
+          ...prev,
+          chiefChatHistory: finalHistory
+        }));
+        broadcast('SYNC_CHIEF_CHAT', modelMessage);
+        syncWithServer({ chiefChatHistory: finalHistory });
+      } catch (error: any) {
+        console.error("Chief consultation failed:", error);
+        const errorMsg: Message = { role: 'model', text: `[SYSTEM]: Consultation failed. Please try again.` };
+        setInvestigation(prev => ({
+          ...prev,
+          chiefChatHistory: [...updatedHistory, errorMsg]
+        }));
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      const suspectId = investigation.currentSuspectId!;
+      const suspect = investigation.case.suspects.find(s => s.id === suspectId)!;
+      const currentHistory = investigation.chatHistory[suspectId] || [];
+      const updatedHistory = [...currentHistory, newUserMessage];
+
       setInvestigation(prev => ({
         ...prev,
         chatHistory: {
           ...prev.chatHistory,
-          [suspect.id]: finalHistory
+          [suspectId]: updatedHistory
         }
       }));
-      broadcast('SYNC_CHAT', { suspectId: suspect.id, message: modelMessage });
-      syncWithServer({ chatHistory: { ...investigation.chatHistory, [suspect.id]: finalHistory } });
-    } catch (error: any) {
-      console.error("Interrogation failed:", error);
-      let errorMessage = "Interrogation failed. Please try again.";
-      if (error.message?.includes('429') || error.message?.includes('Quota exceeded')) {
-        errorMessage = "AI Quota exceeded. Please wait a minute before asking another question.";
-      }
+      broadcast('SYNC_CHAT', { suspectId, message: newUserMessage });
       
-      const errorMsg: Message = { role: 'model', text: `[SYSTEM]: ${errorMessage}` };
-      setInvestigation(prev => ({
-        ...prev,
-        chatHistory: {
-          ...prev.chatHistory,
-          [suspect.id]: [...updatedHistory, errorMsg]
+      setInputText('');
+      setLoading(true);
+
+      try {
+        const responseText = await interrogateSuspect(suspect, investigation.case, currentHistory, inputText);
+        const modelMessage: Message = { role: 'model', text: responseText };
+        
+        const finalHistory = [...updatedHistory, modelMessage];
+        setInvestigation(prev => ({
+          ...prev,
+          chatHistory: {
+            ...prev.chatHistory,
+            [suspectId]: finalHistory
+          }
+        }));
+        broadcast('SYNC_CHAT', { suspectId, message: modelMessage });
+        syncWithServer({ chatHistory: { ...investigation.chatHistory, [suspectId]: finalHistory } });
+      } catch (error: any) {
+        console.error("Interrogation failed:", error);
+        let errorMessage = "Interrogation failed. Please try again.";
+        if (error.message?.includes('429') || error.message?.includes('Quota exceeded')) {
+          errorMessage = "AI Quota exceeded. Please wait a minute before asking another question.";
         }
-      }));
-    } finally {
-      setLoading(false);
+        
+        const errorMsg: Message = { role: 'model', text: `[SYSTEM]: ${errorMessage}` };
+        setInvestigation(prev => ({
+          ...prev,
+          chatHistory: {
+            ...prev.chatHistory,
+            [suspectId]: [...updatedHistory, errorMsg]
+          }
+        }));
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -453,6 +504,29 @@ export default function App() {
       <div className={`${activeTab === 'case' ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-zinc-800 flex-col h-full bg-[#0a0a0a] z-20`}>
         <div className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar">
           <div className="p-4 md:p-6 border-b border-zinc-800">
+            <div className="mb-6">
+              <button
+                onClick={() => {
+                  setIsChiefConsultation(true);
+                  setInvestigation(prev => ({ ...prev, currentSuspectId: null }));
+                  if (window.innerWidth < 768) setActiveTab('chat');
+                }}
+                className={`w-full p-4 rounded-2xl border flex items-center gap-3 transition-all ${
+                  isChiefConsultation 
+                    ? 'bg-emerald-900/20 border-emerald-500/50 text-emerald-500' 
+                    : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <div className={`p-2 rounded-lg ${isChiefConsultation ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-500'}`}>
+                  <History size={18} />
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-bold uppercase tracking-wider">Chief Officer</div>
+                  <div className="text-[10px] opacity-60">Consult for logical doubts</div>
+                </div>
+              </button>
+            </div>
+
             <div className="flex justify-between items-center mb-4">
               <div className="flex items-center gap-2">
                 <h3 className="text-xs font-mono text-zinc-500 uppercase tracking-widest">Suspects</h3>
@@ -467,6 +541,7 @@ export default function App() {
                 <div key={suspect.id} className="relative group">
                   <button
                     onClick={() => {
+                      setIsChiefConsultation(false);
                       setInvestigation(prev => ({ ...prev, currentSuspectId: suspect.id }));
                       if (window.innerWidth < 768) setActiveTab('chat');
                     }}
@@ -526,25 +601,29 @@ export default function App() {
 
       {/* Main: Interrogation - Hidden on mobile unless activeTab is 'chat' */}
       <div className={`${activeTab === 'chat' ? 'flex' : 'hidden'} md:flex flex-1 flex-col relative h-full`}>
-        {investigation.currentSuspectId ? (
+        {(investigation.currentSuspectId || isChiefConsultation) ? (
           <>
             <div className="p-4 md:p-6 border-b border-zinc-800 flex justify-between items-center bg-[#0a0a0a]">
               <div>
                 <h2 className="text-xl md:text-2xl font-serif italic">
-                  {investigation.case?.suspects.find(s => s.id === investigation.currentSuspectId)?.name}
+                  {isChiefConsultation ? "Chief Officer" : investigation.case?.suspects.find(s => s.id === investigation.currentSuspectId)?.name}
                 </h2>
-                <p className="text-[10px] md:text-xs text-zinc-500 font-mono uppercase">Interrogation in progress</p>
+                <p className="text-[10px] md:text-xs text-zinc-500 font-mono uppercase">
+                  {isChiefConsultation ? "Consultation in progress" : "Interrogation in progress"}
+                </p>
               </div>
-              <button 
-                onClick={() => setShowProfile(investigation.currentSuspectId)}
-                className="flex items-center gap-2 text-[10px] md:text-xs font-mono text-zinc-500 hover:text-white transition-colors"
-              >
-                <span className="hidden sm:inline">VIEW PROFILE</span> <Info size={14} />
-              </button>
+              {!isChiefConsultation && (
+                <button 
+                  onClick={() => setShowProfile(investigation.currentSuspectId)}
+                  className="flex items-center gap-2 text-[10px] md:text-xs font-mono text-zinc-500 hover:text-white transition-colors"
+                >
+                  <span className="hidden sm:inline">VIEW PROFILE</span> <Info size={14} />
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 pb-40 md:pb-48">
-              {investigation.chatHistory[investigation.currentSuspectId]?.map((msg, i) => (
+              {(isChiefConsultation ? investigation.chiefChatHistory : investigation.chatHistory[investigation.currentSuspectId!])?.map((msg, i) => (
                 <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
                   {msg.sender && msg.sender !== investigation.myPlayerId && (
                     <span className="text-[10px] font-mono text-zinc-600 mb-1 uppercase">Partner</span>
@@ -573,7 +652,12 @@ export default function App() {
               {loading && (
                 <div className="flex justify-start">
                   <div className="bg-zinc-900 p-4 rounded-2xl rounded-tl-none border border-zinc-800">
-                    <Loader2 className="animate-spin text-zinc-500" size={16} />
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="animate-spin text-zinc-500" size={16} />
+                      <span className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
+                        {isChiefConsultation ? "Chief is reviewing..." : "Suspect is responding..."}
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -590,7 +674,7 @@ export default function App() {
                     broadcast('SYNC_TYPING', e.target.value.length > 0);
                   }}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Ask a question..."
+                  placeholder={isChiefConsultation ? "Ask the Chief about your doubts..." : "Ask a question..."}
                   className="w-full bg-zinc-900 border border-zinc-800 rounded-full py-3 md:py-4 pl-5 md:pl-6 pr-12 md:pr-14 focus:outline-none focus:border-zinc-600 text-sm"
                 />
                 <button 
@@ -608,8 +692,8 @@ export default function App() {
             <div className="w-20 h-20 md:w-24 md:h-24 bg-zinc-900 rounded-full flex items-center justify-center mb-6 border border-zinc-800">
               <MessageSquare size={32} md:size={40} className="text-zinc-700" />
             </div>
-            <h2 className="text-lg md:text-xl font-medium mb-2">Select a Suspect</h2>
-            <p className="text-zinc-500 max-w-sm text-sm">Choose a suspect from the sidebar to begin interrogation. Watch for contradictions and hidden motives.</p>
+            <h2 className="text-lg md:text-xl font-medium mb-2">Select a Suspect or Consult Chief</h2>
+            <p className="text-zinc-500 max-w-sm text-sm">Choose a suspect from the sidebar to begin interrogation, or consult the Chief Officer for logical guidance.</p>
             <button 
               onClick={() => setActiveTab('case')}
               className="mt-6 md:hidden px-6 py-2 bg-zinc-800 text-white rounded-full text-sm font-bold"

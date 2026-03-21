@@ -162,11 +162,12 @@ export const generateCase = async (): Promise<Case> => {
                   alibi: { type: Type.STRING },
                   isCulprit: { type: Type.BOOLEAN },
                   secret: { type: Type.STRING },
+                  gender: { type: Type.STRING, enum: ["MALE", "FEMALE", "NON-BINARY"] },
                   age: { type: Type.STRING },
                   occupation: { type: Type.STRING },
                   traits: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
-                required: ["id", "name", "description", "personality", "motive", "alibi", "isCulprit", "secret", "age", "occupation", "traits"]
+                required: ["id", "name", "description", "personality", "motive", "alibi", "isCulprit", "secret", "gender", "age", "occupation", "traits"]
               }
             },
             solution: { type: Type.STRING }
@@ -177,6 +178,14 @@ export const generateCase = async (): Promise<Case> => {
     });
     return JSON.parse(response.text || "{}");
   });
+};
+
+export const getVoiceForGender = (gender: string): string => {
+  switch (gender) {
+    case 'FEMALE': return 'Kore';
+    case 'MALE': return 'Puck';
+    default: return 'Zephyr';
+  }
 };
 
 export const interrogateSuspect = async (
@@ -196,6 +205,7 @@ export const interrogateSuspect = async (
     - Your Motive: ${suspect.motive}
     - Your Alibi: ${suspect.alibi}
     - Your Secret: ${suspect.secret}
+    - Your Gender: ${suspect.gender}
     - Are you the culprit? ${suspect.isCulprit ? "YES" : "NO"}
 
     STRICT RULES:

@@ -49,6 +49,7 @@ export interface RoomData {
   case: Case | null;
   notes: string;
   chatHistory: Record<string, Message[]>;
+  chiefChatHistory: Message[];
   accusationResult?: {
     isCorrect: boolean;
     feedback: string;

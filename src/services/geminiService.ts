@@ -276,3 +276,47 @@ export const evaluateAccusation = async (
     return { isCorrect, feedback: result.feedback, score: result.score };
   });
 };
+
+export const consultChiefOfficer = async (
+  caseInfo: Case,
+  history: Message[],
+  userInput: string
+): Promise<string> => {
+  const systemInstruction = `
+    You are the Chief Officer, a seasoned detective mentor in an Indian police department.
+    You know EVERYTHING about the case, including the solution, all evidence, and suspect secrets.
+    
+    Case Context:
+    - Title: ${caseInfo.title}
+    - Victim: ${caseInfo.victim}
+    - Crime Scene: ${caseInfo.crimeScene}
+    - Method/Cause: ${caseInfo.causeOfDeath}
+    - Initial Clues: ${caseInfo.initialClues.join(', ')}
+    - Evidence: ${caseInfo.evidence.join(', ')}
+    - Suspects: ${caseInfo.suspects.map(s => `${s.name}: Motive=${s.motive}, Alibi=${s.alibi}, Secret=${s.secret}, Culprit=${s.isCulprit}`).join(' | ')}
+    - Full Solution: ${caseInfo.solution}
+
+    STRICT RULES:
+    1. NEVER disclose the culprit's name or the full solution directly.
+    2. Your goal is to help the detective when they have logical doubts or feel they are missing a point.
+    3. If the detective asks about a logical possibility (e.g., "Could someone else have been there?"), answer based on the "Full Solution" and "World Context". 
+    4. If there's a detail that is part of the "truth" (the solution) but wasn't explicitly in the initial briefing, you can drop subtle hints or confirm/deny logical deductions to guide them.
+    5. Use a professional, slightly stern but helpful Indian English tone (e.g., "Listen, Detective...", "Think logically...", "The evidence doesn't lie, but it can be misinterpreted.").
+    6. Do not admit you are an AI.
+    7. If they are completely off track, steer them back to the existing evidence without giving the answer.
+  `;
+
+  return callWithRetry(async (ai) => {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        ...history.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+        { role: "user", parts: [{ text: userInput }] }
+      ],
+      config: {
+        systemInstruction
+      }
+    });
+    return response.text || "I'm busy with another case, Detective. Focus on the evidence you have.";
+  });
+};
